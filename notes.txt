@@ -1,0 +1,112 @@
+# Understanding the cost of distance through Architecture → Benchmarking → LLM Dev → Finetuning
+
+
+This repository is the practical implementation of a research question that sits behind the blog thesis:
+
+> Knowledge is expanding faster than its own memory. The problem is not only information overload, but the loss of continuity between ideas, architectures, and systems.
+
+In this project, that continuity is reconstructed through a single measurement discipline:
+
+- map an algorithm's dependence structure
+- identify its dwarf class
+- predict its bottleneck
+- measure its roofline position
+- carry that reasoning upward into LLM execution, training, and finetuning
+
+The central line is simple:
+
+> The dependence graph is the dwarf. Fix the dependence structure of an algorithm and you have already determined its available parallelism, arithmetic intensity, roofline position, and the system level it belongs on.
+
+This is the same lens used to understand the machine world itself. The cost of distance is not only about physical movement of data; it is the enduring cost of representing the world through computational systems, and of navigating the intellectual distance between one breakthrough and the deeper constraint that made it possible.
+
+## What this repository is
+
+This folder is a field notebook for that investigation. It is a working environment for turning the blog's worldview into concrete artifacts:
+
+- roofline measurements
+- kernel-level performance characterization
+- dependence-driven bottleneck reasoning
+- a bridge from systems architecture to later LLM and finetuning work
+
+The repository is therefore not only a benchmark sandbox. It is a practical instantiation of the newsletter's mission:
+
+- recover continuity across generations of research
+- show how older constraints reappear in new architectures
+- keep the technical story grounded in reproducible evidence
+
+## The sprint trajectory
+
+The repo follows a two-pass spiral workflow:
+
+- Pass 1 — breadth: touch every major layer once
+- Pass 2 — depth: repeat the same loop with sharper measurements and larger claims
+
+The four layers are:
+
+1. Systems & dependence graphs
+2. Distributed training & benchmarking
+3. LLM development
+4. Finetuning, compression, and evaluation
+
+Each layer follows the same ritual:
+
+- Day A — absorb and baseline
+- Day B — build and measure
+- Day C — verify, publish, and convert
+
+## The measurement contract
+
+To keep the project coherent, every component is expected to answer the same five questions:
+
+1. What is the available parallelism / critical-path length?
+2. What is the arithmetic intensity (FLOPs per byte)?
+3. What achieved GFLOP/s was measured?
+4. What achieved bandwidth was measured?
+5. Where does the result sit on the roofline, and how does it scale?
+
+This is the discipline that turns a collection of experiments into a narrative of continuity.
+
+## Component 1 — systems and dependence graphs
+
+This folder currently represents the first layer of the project: systems and dependence-graph reasoning.
+
+### What is being measured
+
+- roofline behavior across CPU and GPU regimes
+- dependence-driven bottlenecks
+- traffic-sensitive kernels and their scaling profile
+- the relationship between structure, arithmetic intensity, and observed performance
+
+### What the artifacts are meant to support
+
+- a local machine ceiling table
+- a prediction table that links dependence structure to the expected dwarf and bottleneck
+- a roofline chart that grounds the later LLM and finetuning work in the same framework
+
+## Repository layout
+
+- `cpp/` — benchmark kernels and performance-oriented source files
+- `python/` — analysis and plotting scripts
+- `build/` — generated build artifacts
+- `roofline.csv` / `roofline1.csv` — measurement snapshots
+- `roofline_chart.png` — current visualization output
+
+## Why this matters
+
+The deeper claim of the project is that the machine world can be understood as a geography of constraints:
+
+- data moves across space
+- compute is organized around dependence and locality
+- memory, bandwidth, and synchronization remain the dominant operational realities
+- modern AI does not erase this structure; it intensifies it
+
+That is why the same race of ideas can be seen across architectures, kernels, models, and training methods. The blog is about recovering the continuity of research. This repository is the working trace of that continuity in practice.
+
+## Practical next steps
+
+1. Reproduce and document a clean roofline baseline
+2. Label each kernel by its dependence structure and expected dwarf
+3. Publish one figure and one measurement table per benchmark phase
+4. Carry the same measurement contract forward into LLM development and finetuning
+
+In short: this repo is the lab notebook for the cost-of-distance story, translated into reproducible systems work.
