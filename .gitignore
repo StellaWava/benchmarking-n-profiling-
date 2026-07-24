@@ -32,3 +32,8 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+#nsight sys, cpu
+*.report1.nsys-rep 
+*.report1.sqlite 
+
