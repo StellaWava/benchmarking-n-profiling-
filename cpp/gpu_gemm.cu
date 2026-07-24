@@ -8,6 +8,13 @@ GEMM is 2D hence fully exploits the threadblock.
 
 #include <iostream>
 #include <cuda/cmath>
+#include <iostream>
+#include <chrono>
+#include <vector>
+#include <chrono>
+#include <fstream>
+#include <cstdlib>
+#include <cmath>
 
 // Define compile-time physical tile dimensions inside the SM SRAM
 #define TILE_DIM 32
@@ -92,12 +99,44 @@ int main() {
     dim3 threadsPerBlock(TILE_DIM, TILE_DIM); // 32x32 = 1024 threads
     dim3 numBlocks(cuda::ceil_div(N, TILE_DIM), cuda::ceil_div(N, TILE_DIM));
 
-    // Gateway Launch with Triple Chevrons
+    // kernal warm up
+    gemm_tiled_kernel<<<numBlocks, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    cudaDeviceSynchronize();
+
+    //Active Timing Block
+    const auto start = std::chrono::steady_clock::now();
+    //launch kernel 
     gemm_tiled_kernel<<<numBlocks, threadsPerBlock>>>(d_A, d_B, d_C, N);
 
-    // Retrieve results and free up pools
+    //sync gpu
+    cudaDeviceSynchronize();
+    //measure time
+    const auto end = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> elapsed = end - start;
+    const double seconds = elapsed.count();
+
+    // Retrieve results
     cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+    //get results
+    std::cout << "GEMM matmul C: [" << d_C <<"]\n";
+
+    // 7. Calculate Metrics
+    constexpr double flops_per_element = 2.0;
+    const double total_flops = static_cast<double>(num_rows) * flops_per_element;
+    constexpr double bytes_per_element = 3.0 * sizeof(double);
+    const double total_bytes = static_cast<double>(num_rows) * bytes_per_element;
+
+    const double gflops = total_flops / seconds / 1.0e9;
+    const double bandwidth_gb_s = total_bytes / seconds / 1.0e9;
+    const double arithmetic_intensity = flops_per_element / bytes_per_element;
+
+    double checksum = 0.0;
+    for (std::size_t i = 0; i < num_rows; ++i) {
+        checksum += h_y[i];
+    }
     
+
+    //free up memory
     cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
     free(h_A); free(h_B); free(h_C);
     return 0;

@@ -110,7 +110,7 @@ int main() {
 
     // copy final results to back host 
     cudaMemcpy(h_y, d_y, size_vector, cudaMemcpyDeviceToHost);
-    //launch kernel computation
+    //get results
     std::cout << "SpMV Result Vector y: [" << h_y[0] << ", " << h_y[1] << ", " << h_y[2] << "]\n";
 
 

@@ -34,6 +34,5 @@ __pycache__/
 Thumbs.db
 
 #nsight sys, cpu
-*.report1.nsys-rep 
-*.report1.sqlite 
-
+report1.nsys-rep
+report1.sqlite
