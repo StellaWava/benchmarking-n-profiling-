@@ -63,15 +63,20 @@ Phase 0 of this project is expressed in CUDA/C++, with an effort to exploit all 
 
 Python and advanced frameworks will be adopted for visualisations and along the way in the effort to accomplish the LLM development progression. 
 
-- STREAM TRIAD 
-The STREAM triad was the first benchmarking algorithm created by John in 1994 arguing the ceiling of the manycore and manythreads architectural developments at the time. 
+## Bottleneck per mathematical model
+The image above maps and summarizes the bottlenecks as would be exposed by each mathematical model.i.e.
 
-It is a product-sum update 
+### STREAM TRIAD
+*Why this model?* The STREAM triad was the first benchmarking algorithm created by John in 1994 arguing the ceiling of the manycore and manythreads architectural developments at the time.  It is the minimal product-sum update and therefore the cleanest expression of streaming memory traffic. 
 
+*What it exposes?* It exposes the memory wall directly. The kernel highlights whether the system is limited by bandwidth, latency, or the ability to sustain a long sequence of regular loads and stores.
 
+*Results expected:* Memory-bandwidth bottleneck and streaming throughput ceiling.
 
+### SpMV Matrix
 
+### GEMM Matrix
 
+### FFT
 
-
-# Results analysis 
+# Results analysis
