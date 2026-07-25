@@ -67,6 +67,7 @@ Python and advanced frameworks will be adopted for visualisations and along the 
 The image above maps and summarizes the bottlenecks as would be exposed by each mathematical model.i.e.
 
 ### STREAM TRIAD
+**Full Math function** 
 **Why this model?** The STREAM triad was the first benchmarking algorithm created by John in 1994 arguing the ceiling of the manycore and manythreads architectural developments at the time.  It is the minimal product-sum update and therefore the cleanest expression of streaming memory traffic. 
 
 **What it exposes?** It exposes the memory wall directly. The kernel highlights whether the system is limited by bandwidth, latency, or the ability to sustain a long sequence of regular loads and stores.
@@ -74,15 +75,21 @@ The image above maps and summarizes the bottlenecks as would be exposed by each 
 **Results expected:** Memory-bandwidth bottleneck and streaming throughput ceiling.
 
 ### SpMV Matrix
+**Full Math function** 
 **Why this model?**
 **What it exposes?**
+**Results expected:** 
 
 ### GEMM Matrix
+**Full Math function** 
 **Why this model?**
 **What it exposes?**
+**Results expected:** 
 
 ### FFT
+**Full Math function** 
 **Why this model?**
 **What it exposes?**
+**Results expected:** 
 
 # Results analysis
