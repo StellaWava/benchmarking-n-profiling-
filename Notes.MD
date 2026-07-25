@@ -13,11 +13,11 @@ The central line is simple:
 The Berkeley View created over 20 years ago, summarizes data movement and the computational bottlenecks through 13 dwarfs. All these dwarf reintroduce the mathematical foundations unto which all the algorithms and all the current computer architecture and software sit, i.e. sparse Matrices, Dense Matrices, the ..... The dwarfing goal was to highlight the bottlenecks faced with the current computing world with some structure. 
 
 Our project is exploiting only 3 of the 12 in the effort to reproduce in an indexed manner, not only their genesis, but how they've influenced high performance computing and innovation for over a century. These include; 
-a) STREAM TRIAD (C = A + B*scalar; one of the simplest sum-product vector updates)
-b) Sparse Matrix Vector (y = Ax; where A is a sparse vector)
-c) General Matrix Multiply (C = xAB + nC; a grid product-sum update)
-d) Fast Fourier Transform -FFT (.........; BONUS: as is one of the complex application for the engine)
-e) Combinatorial Logic (TBD)
+- STREAM TRIAD (C = A + B*scalar; one of the simplest sum-product vector updates)
+- Sparse Matrix Vector (y = Ax; where A is a sparse vector)
+- General Matrix Multiply (C = xAB + nC; a grid product-sum update)
+- Fast Fourier Transform -FFT (.........; BONUS: as is one of the complex application for the engine)
+- Combinatorial Logic (TBD)
 
 
 # Snapshot of computing infrastructure for the last 20 years - including bottlenecks
@@ -45,7 +45,33 @@ e) Combinatorial Logic (TBD)
 | 9. The CUDA Complexity Crisis (2015) | Scientists waste months manually managing GPU thread dimensions and synchronization. | Static computational grids: deep convolutional networks and fixed-length recurrent neural networks (RNNs). | NVIDIA Kepler / Maxwell architectures: standard discrete GPUs processing bulk data arrays. | Static-graph frameworks (TensorFlow 2015): compiling a rigid mathematical blueprint ahead of time to abstract away raw CUDA. | The debugging and rigidity wall: inability to handle dynamic, variable-length natural language processing sequences easily. |
 | 10. The Dynamic Sequence Challenge (2016–2020) | Natural language text sequences vary wildly in length, breaking static hardware graphs. | Dynamic attention tensors: transformers, variable-length text generation, and backpropagation tracking. | NVIDIA Pascal / Volta (early Tensor Cores): silicon designed specifically to accelerate 4x4 matrix-multiply operations. | Dynamic-graph frameworks (PyTorch 2016): imperative, line-by-line execution that intercepts math and drops it straight into optimized CUDA streams. | The GPU global memory hierarchy wall: the GPU ALUs calculate math so fast that they sit starved waiting for data from off-chip VRAM. |
 
-# Measuring roofline
+
+
+# Microbenchmarking and roofline based on each dwarf algorithm 
+
+## First, CUDA --> Python Frameworks
+
+| Transition | Description |
+|---|---|
+| The Transition from Raw Binary to Assemblers (Era 2) | Kathleen Booth and Grace Hopper wrote the first assemblers because writing raw binary numbers such as 0001 1100 was too error-prone for humans. |
+| The Transition from Raw CUDA to PyTorch/TensorFlow (Era 9/10) | Scientists invented PyTorch because manually managing thousands of physical GPU threads and VRAM pointers was too slow and complex. |
+| The Abstraction Leap | Whenever hardware introduces a massive jump in raw capability, humans initially try to program it manually before realizing they must invent a software abstraction layer to preserve human sanity. |
+| PyTorch Tensors & Operators | Wrapping complex C++/CUDA execution scripts inside simple Python syntax such as outputs = model(inputs). |
+
+Phase 0 of this project is expressed in CUDA/C++, with an effort to exploit all CUDA capabilities to expose all compute and memory interactions through the entire benchmarking process. In the end, the phase will highlight how each of the dwarf algorithms negotiates and displays each one of the bottlenecks highlighted in the image:
+![alt text](image.png)
+
+Python and advanced frameworks will be adopted for visualisations and along the way in the effort to accomplish the LLM development progression. 
+
+- STREAM TRIAD 
+The STREAM triad was the first benchmarking algorithm created by John in 1994 arguing the ceiling of the manycore and manythreads architectural developments at the time. 
+
+It is a product-sum update 
 
 
 
+
+
+
+
+# Results analysis 
