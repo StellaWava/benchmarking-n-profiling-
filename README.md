@@ -1,8 +1,8 @@
 # Phase 0: Benchmarking and Roofline Exploration for CPU/GPU Data Movement
 
-This repository is a benchmarking and roofline working folder for exploring how data movement through modern machines shapes performance across scientific computing kernels.
+This repository is a benchmarking and roofline working folder for exploring how data movement through modern machines shapes performance across scientific computing kernels. It is the first phase of the larger high performance computing indexing project towards knowledge convergence, from: **Architecture → Benchmarking → LLM/Language Model Development → Finetuning**
 
-The project is intentionally practical and reusable. It is designed to help map how different computational patterns stress the CPU and GPU in different ways, especially when the same underlying algorithmic ideas are expressed through arrays, tiles/stencils, and other structured data layouts.
+The project phase is intentionally practical and reusable. It is designed to help map how different computational patterns stress the CPU and GPU in different ways, especially when the same underlying algorithmic ideas are expressed through arrays, tiles/stencils, and other structured data layouts.
 
 ## What this repository studies
 
@@ -24,9 +24,6 @@ The emphasis is latency and understanding the relationship between:
 ## Why this folder exists
 
 This is the Phase 0 step in a longer sprint that runs from:
-
-Architecture → Benchmarking → LLM Dev → Finetuning
-
 At this stage, the objective is not to produce a polished end-to-end model pipeline, but to produce grounded, reusable systems-building work that anyone can inspect, reproduce, and extend.
 
 This means:
