@@ -37,3 +37,6 @@ Thumbs.db
 #nsight sys, cpu
 report1.nsys-rep
 report1.sqlite
+
+gemm
+gemmu 

@@ -89,3 +89,70 @@ That is why the same race of ideas can be seen across architectures, kernels, mo
 4. Carry the same measurement contract forward into LLM development and finetuning
 
 In short: this repo is the lab notebook for the cost-of-distance story, translated into reproducible systems work.
+
+
+#personal 
+If 1 Thread Block = 1024 threads, then 1 SM can hold exactly 2 blocks (1024 × 2 = 2048).
+If 1 Thread Block = 256 threads, then 1 SM can hold exactly 8 blocks (256 × 8 = 2048).
+
+16 × 16 Block: Equals 256 threads. Excellent for resource occupancy.
+32 × 32 Block: Equals 1024 threads. This hits the exact hardware block limit.
+
+In a grid; 
+- Matrix C(M * N) = Matrix A(M * K) + Matrix B(K * N)
+This means matrix A rows (i) of M  * matrix B columns(j) of N
+thread(i,j), each thread can handle a single element. 
+hence threads to rows and threads to columns
+int row = blockIdx.y * blockDim.y + threadIdx.y;
+int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+final GEMM equation:\(\text{Final\ Value}=(\alpha \times \text{sum})+(\beta \times C[\text{row}][\text{col}])\)
+
+Overlapping and "Streaming" the Execution
+- Pipelined Transfer: Stream 1 copies a chunk of Matrix A and B to the GPU.
+- Asynchronous Compute: While Stream 1 executes the kernel calculation on the GPU, Stream 2 simultaneously copies the next chunk of data over the PCIe bus.
+- Latency Hiding: This completely hides the slow PCIe transfer time behind active GPU math.
+
+Temporal Streaming: Also known as data movement across the PCIe buses 
+- Chunk rows of A and columns of B and stream....optimize memory latency 
+Spatial Tiling: data movement inside the SM hardware. 
+- Reduces global memory latency and SM memory bandwidth 
+- get elements of matrix A and B from global memory into a shared array
+i.e. __shared__
+- using _syncthreads(), to ensure the tiles are fully loaded. 
+- Perform dot pdt for the shared memory elements | Tile K 
+- Repeat until all tile are complete, iteratively _syncthreads() all into a complete Tile K 
+
+Use both approaches....
+row * K finds the start of the specific horizontal row this thread is responsible for.
+t * TILE_DIM jumps to the start of the current tile we are processing.
+threadIdx.x tells the thread exactly which element inside that tile to grab.
+
+//applied to parallelism
+int main(){
+    //define square Matrix dimensions 
+
+    const int M, N, K = 4096; 
+    const float alpha = 1.5f;
+    const float beta = 0.5f;
+
+    //allocate pinned memory - ensure direct access 
+    float *h_A, *h_B, *h_C, *h_C_gold;
+    //host to device
+    checkcuda(cudaHostAlloc(&h_A, M * K * sizeof(float), cudaHostAllocDefault));
+    checkcuda(cudaHostAlloc(&h_B, N * K * sizeof(float), cudaHostAllocDefault));
+    checkcuda(cudaHostAlloc(&h_C, M * N * sizeof(float), cudaHostAllocDefault));
+
+    //initialize the matrix
+    for (int i = 0; i<M*K; ++i) h_A[i] = 1.0f;
+    for (int i = 0; i < K*N; ++I) h_B[I] = 0.5f;
+    for (int i = 0; i < M*N; ++i){
+        h_C[i] = 2.0f;
+        h_C_gold = 2.0F;
+    }
+
+    //setup stream + device pointer
+    const int num_streams = 4;
+    cudaStream_t = streams[num_streams];
+
+}
