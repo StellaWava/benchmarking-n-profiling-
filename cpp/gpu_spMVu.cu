@@ -1,10 +1,36 @@
+//spMV baseline 
+//roofline model 
 #include <iostream>
 #include <chrono>
 #include <vector>
 #include <fstream>
 #include <cstdlib>
 #include <cmath>
+#include <numeric>
 #include <cuda_runtime.h>
+
+struct HardwareLimits {
+    double peak_gflops;
+    double peak_bandwidth_gb_s;
+    double ridge_point;
+};
+
+HardwareLimits get_gpu_limits() {
+    HardwareLimits limits{0.0, 0.0, 0.0};
+    int device_id = 0;
+    if (cudaGetDevice(&device_id) == cudaSuccess) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, device_id);
+        // Peak theoretical single-precision (FP32) calculation
+        limits.peak_gflops = prop.multiProcessorCount * 128.0 * (prop.clockRate / 1.0e6);
+        limits.peak_bandwidth_gb_s = (prop.memoryClockRate * 1000.0 * (prop.memoryBusWidth / 8.0) * 2.0) / 1.0e9;
+    } else {
+        limits.peak_gflops = 10000.0; 
+        limits.peak_bandwidth_gb_s = 900.0;
+    }
+    limits.ridge_point = limits.peak_gflops / limits.peak_bandwidth_gb_s;
+    return limits;
+}
 
 std::string get_machine_name() {
 #if defined(_WIN32) || defined(_WIN64)
@@ -17,32 +43,27 @@ std::string get_machine_name() {
 }
 
 __global__ void spmv_kernel(const int *I, const float *V, const int *C, const float *x, float *y, int num_rows){
-    int row = blockIdx.x * blockDim.x + threadIdx.x; 
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
     if (row < num_rows){
         float dot_product = 0.0f;
         int row_start = I[row];
-        int row_end = I[row + 1]; 
+        int row_end = I[row + 1];
         for (int element = row_start; element < row_end; ++element){
             int col = C[element];
-            dot_product += V[element] * x[col]; 
+            dot_product += V[element] * x[col];
         }
         y[row] = dot_product;
     }
 }
 
-int main() {
-    std::string machine_name = get_machine_name();
-
-    // SCALED UP FOR ACCURATE TIMING: 100,000 rows, 4 non-zeros per row average
-    int num_rows = 100000;
-    int nnz = num_rows * 4;
-
+void run_spmv_um_sweep(int num_rows, const std::string& machine_name, std::ofstream& csv, const HardwareLimits& hw) {
+    int nnz = num_rows * 4; // Constant 4 non-zeros per row average
+    
     size_t size_I = (num_rows + 1) * sizeof(int);
     size_t size_V = nnz * sizeof(float);
     size_t size_C = nnz * sizeof(int);
     size_t size_vector = num_rows * sizeof(float);
 
-    // Instead of separate host and device mem allocation - apply unified mem 
     int *I; float *V; int *C; float *x; float *y;
     cudaMallocManaged((void**)&I, size_I);
     cudaMallocManaged((void**)&V, size_V);
@@ -50,76 +71,101 @@ int main() {
     cudaMallocManaged((void**)&x, size_vector);
     cudaMallocManaged((void**)&y, size_vector);
 
-    //use cpu code to initialize directly 
-    for (int i =0; i <=num_rows; ++i) I[i] = i * 4;
-    for (int i = 0; i < nnz; ++i){
+    // Initialize memory directly via host CPU threads
+    for (int i = 0; i <= num_rows; ++i) I[i] = i * 4;
+    for (int i = 0; i < nnz; ++i) {
         V[i] = 10.0f;
-        C[i] = (i% num_rows);
+        C[i] = (i % num_rows);
     }
-    for(int i = 0;i < num_rows; ++i){
+    for (int i = 0; i < num_rows; ++i) {
         x[i] = 1.0f;
         y[i] = 0.0f;
     }
 
-    //Prefetch data to gpu
     int device = 0;
+    
+    // --- Time H2D Pipeline Migration via Unified Memory Prefetch ---
+    const auto transfer_start = std::chrono::steady_clock::now();
     cudaMemPrefetchAsync(I, size_I, device, NULL);
     cudaMemPrefetchAsync(V, size_V, device, NULL);
     cudaMemPrefetchAsync(C, size_C, device, NULL);
     cudaMemPrefetchAsync(x, size_vector, device, NULL);
-
+    cudaDeviceSynchronize(); // Guarantee items migrated before benchmarking
 
     int threadsPerBlock = 256;
     int numBlocks = (num_rows + threadsPerBlock - 1) / threadsPerBlock;
 
-    // --- WARM UP LAUNCH ---eliminate the h_ and d_ pointers
+    // --- WARM UP PASS ---
     spmv_kernel<<<numBlocks, threadsPerBlock>>>(I, V, C, x, y, num_rows);
     cudaDeviceSynchronize();
 
-    // --- ACTIVE TIMING BLOCK ---
-    const auto start = std::chrono::steady_clock::now();
-    
-    // Launch
+    // --- ACTIVE ISOLATED KERNEL TIMING BLOCK ---
+    const auto kernel_start = std::chrono::steady_clock::now();
     spmv_kernel<<<numBlocks, threadsPerBlock>>>(I, V, C, x, y, num_rows);
-    cudaDeviceSynchronize(); // Await full GPU finish before stopping execution clock
-    
-    const auto end = std::chrono::steady_clock::now();
-    const std::chrono::duration<double> elapsed = end - start;
-    const double seconds = elapsed.count(); // average seconds per kernel execution
+    cudaDeviceSynchronize();
+    const auto kernel_end = std::chrono::steady_clock::now();
+
+    // --- Time D2H Return Path to Host ---
     cudaMemPrefetchAsync(y, size_vector, cudaCpuDeviceId, NULL);
     cudaDeviceSynchronize(); 
+    const auto total_end = std::chrono::steady_clock::now();
 
-    //read final results directly on CPU
-    std::cout <<"spMV MSR Result Vector y:[" << y[0] <<", " << y[1] << ", " << y[2] <<"]\n";
+    double kernel_sec = std::chrono::duration<double>(kernel_end - kernel_start).count();
+    double total_sec = std::chrono::duration<double>(total_end - transfer_start).count();
 
-    // --- CALCULATE REAL METRICS ---
-    // SpMV FLOPs: 1 Multiply + 1 Add per NNZ = 2 * NNZ
+    // Calculate Real Application Workload Metrics
     const double total_flops = 2.0 * static_cast<double>(nnz);
-    
-    // SpMV Bytes: Read I, Read V, Read C, Read X (ideal), Write Y
     const double total_bytes = static_cast<double>(size_I + size_V + size_C + size_vector + size_vector);
-    
-    const double gflops = total_flops / seconds / 1.0e9;
-    const double bandwidth_gb_s = total_bytes / seconds / 1.0e9;
+
+    const double kernel_gflops = total_flops / kernel_sec / 1.0e9;
+    const double kernel_bandwidth = total_bytes / kernel_sec / 1.0e9;
     const double arithmetic_intensity = total_flops / total_bytes;
 
-    // Checksum using structural indices to ensure correctness
     double checksum = 0.0;
-    for (int i = 0; i < num_rows; ++i) { checksum += y[i]; } // Sample verification
+    for (int i = 0; i < num_rows; ++i) { checksum += y[i]; }
 
-    std::cout << "CUDA GPU SpMV | Bandwidth: " << bandwidth_gb_s << " GB/s | Performance: " << gflops << " GFLOP/s\n";
+    std::cout << "Rows: " << num_rows << " | UM Kernel BW: " << kernel_bandwidth << " GB/s"
+              << " | Performance: " << kernel_gflops << " GFLOP/s\n";
 
-    // --- CSV MANAGEMENT ---
+    // Standardize CSV column formatting matching previous scripts
+    csv << machine_name << ","
+        << "spMV CSR UM cuda" << ","
+        << num_rows << ","
+        << arithmetic_intensity << ","
+        << kernel_bandwidth << ","
+        << kernel_gflops << ","
+        << kernel_sec << ","
+        << total_sec << "," // Captures prefetch migration overhead side-by-side
+        << hw.peak_gflops << ","
+        << hw.peak_bandwidth_gb_s << ","
+        << hw.ridge_point << ","
+        << checksum << "\n";
+
+    cudaFree(I); cudaFree(V); cudaFree(C); cudaFree(x); cudaFree(y);
+}
+
+int main() {
+    std::string machine_name = get_machine_name();
+    HardwareLimits hw = get_gpu_limits();
+
+    // Problem sizes sweep configuration
+    std::vector<int> sweep_sizes = {10000, 50000, 100000, 200000};
+
     std::ifstream check_empty("roofline.csv");
     bool add_header = !check_empty.is_open() || check_empty.peek() == std::ifstream::traits_type::eof();
     check_empty.close();
 
     std::ofstream csv("roofline.csv", std::ios::app);
     if (add_header) {
-        csv << "machine,dwarf name,AI,bandwidth (GB/s),performance (GFLOP/s),threads,checksum\n";
+        csv << "machine,dwarf name,problem_size,AI,measured_bandwidth(GB/s),"
+               "measured_performance(GFLOP/s),kernel_time(s),total_time_with_io(s),"
+               "peak_compute(GFLOP/s),peak_bandwidth(GB/s),ridge_point,checksum\n";
     }
-    csv << machine_name << "," << "Sparse MV CSR" << "," << arithmetic_intensity << "," << bandwidth_gb_s << "," << gflops << "," << "CUDA" << "," << checksum << "\n";
 
-    cudaFree(I); cudaFree(V); cudaFree(C); cudaFree(x); cudaFree(y);
+    std::cout << "Running SpMV Unified Memory CUDA Sweeps on: " << machine_name << "\n";
+    for (int N : sweep_sizes) {
+        run_spmv_um_sweep(N, machine_name, csv, hw);
+    }
+
     return 0;
 }

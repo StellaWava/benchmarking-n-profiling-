@@ -1,0 +1,693 @@
+//stream triad 
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <fstream>
+#include <cstdlib>
+
+//get system info if avaliable 
+std::string get_machine_name() {
+#if defined(_WIN32) || defined(_WIN64)
+    const char* env = std::getenv("COMPUTERNAME");
+#else
+    const char* env = std::getenv("HOSTNAME");
+    if (!env) env = std::getenv("NAME");
+#endif
+    return env ? std::string(env) : "GPU_Machine";
+}
+
+
+// The CUDA "Kernel" - This runs entirely on the GPU cores
+__global__ void stream_triad_kernel(const double* A, const double* B, double* C, double scalar, size_t N) {
+    // Calculate the unique global element index for this specific GPU thread
+    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Ensure we don't read out of bounds if N is not a perfect multiple of block size
+    if (i < N) {
+        C[i] = A[i] + B[i] * scalar;
+    }
+}
+
+
+//orchastration from host(cpu) to device (gpu)
+int main() {
+    //define array size /entry variables 
+    constexpr std::size_t N = 50000000;
+    constexpr double scalar = 2.0;
+    
+    //execute machine function
+    std::string machine_name = get_machine_name();
+
+    // 1. Allocate Host (CPU) memory vectors
+    std::vector<double> h_A(N, 5.0);
+    std::vector<double> h_B(N, 10.0);
+    std::vector<double> h_C(N, 0.0);
+
+    // 2. Allocate Device (GPU VRAM) pointers
+    double *d_A, *d_B, *d_C;
+    cudaMalloc(&d_A, N * sizeof(double));
+    cudaMalloc(&d_B, N * sizeof(double));
+    cudaMalloc(&d_C, N * sizeof(double));
+
+    // 3. Copy data from Host (RAM) to Device (VRAM)
+    cudaMemcpy(d_A, h_A.data(), N * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B.data(), N * sizeof(double), cudaMemcpyHostToDevice);
+
+    // 4. Configure GPU execution grid - threads perblock and number of blocks
+    int threads_per_block = 256; 
+    int blocks_per_grid = (N + threads_per_block - 1) / threads_per_block;
+    //int blocks_per_grid = cuda::ceil_dev(N, threads_per_block);
+
+    // Warm-up pass to boot up GPU clocks
+    stream_triad_kernel<<<blocks_per_grid, threads_per_block>>>(d_A, d_B, d_C, scalar, N);
+    cudaDeviceSynchronize(); // Wait for warm-up to finish
+
+    // 5. Active Timing Block
+    const auto start = std::chrono::steady_clock::now();
+
+    // Launch the CUDA kernel on the GPU
+    stream_triad_kernel<<<blocks_per_grid, threads_per_block>>>(d_A, d_B, d_C, scalar, N);
+    
+    // Explicitly wait for the GPU to finish computation before stopping the clock
+    cudaDeviceSynchronize(); 
+
+    const auto end = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> elapsed = end - start;
+    const double seconds = elapsed.count();
+
+    // 6. Copy final results back to Host (RAM) for validation
+    cudaMemcpy(h_C.data(), d_C, N * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // 7. Calculate Metrics
+    constexpr double flops_per_element = 2.0;
+    const double total_flops = static_cast<double>(N) * flops_per_element;
+    constexpr double bytes_per_element = 3.0 * sizeof(double);
+    const double total_bytes = static_cast<double>(N) * bytes_per_element;
+
+    const double gflops = total_flops / seconds / 1.0e9;
+    const double bandwidth_gb_s = total_bytes / seconds / 1.0e9;
+    const double arithmetic_intensity = flops_per_element / bytes_per_element;
+
+    double checksum = 0.0;
+    for (std::size_t i = 0; i < N; ++i) {
+        checksum += h_C[i];
+    }
+
+    std::cout << "CUDA GPU | Bandwidth: " << bandwidth_gb_s << " GB/s"
+              << " | Performance: " << gflops << " GFLOP/s\n";
+
+    // 8. CSV Management
+    std::ifstream check_empty("roofline.csv");
+    bool add_header = !check_empty.is_open() || check_empty.peek() == std::ifstream::traits_type::eof();
+    check_empty.close();
+
+    std::ofstream csv("roofline.csv", std::ios::app);
+    if (add_header) {
+        csv << "machine,dwarf name,AI,bandwidth (GB/s),performance (GFLOP/s),threads,checksum\n";
+    }
+
+    csv << machine_name << ","
+        << "stream triad direct cuda" << ","
+        << arithmetic_intensity << ","
+        << bandwidth_gb_s << ","
+        << gflops << ","
+        << "CUDA" << ","
+        << checksum << "\n";
+
+    // 9. Clean up GPU memory allocations
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    return 0;
+}
+
+//spMV  baseline 
+#include <iostream>
+#include <chrono>
+#include <vector>
+#include <chrono>
+#include <fstream>
+#include <cstdlib>
+#include <cmath> 
+
+//get system info if avaliable 
+std::string get_machine_name() {
+#if defined(_WIN32) || defined(_WIN64)
+    const char* env = std::getenv("COMPUTERNAME");
+#else
+    const char* env = std::getenv("HOSTNAME");
+    if (!env) env = std::getenv("NAME");
+#endif
+    return env ? std::string(env) : "GPU_Machine";
+}
+
+//initialize
+__global__ void spmv_kernel(const int *I, const float *V, const int *C, const float *x, float *y, int num_rows){
+    //thread alignment
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //boundary check
+    if (row < num_rows){
+        float dot_product = 0.0f;
+
+        //find where I starts and ends
+        int row_start = I[row];
+        int row_end = I[row + 1];
+
+        //loop through the NNZ elements in the row
+        for (int element = row_start; element < row_end; ++element){
+            int col = C[element];
+            dot_product += V[element] * x[col];
+        }
+
+        //store accumulated dot product into the y 
+        y[row] = dot_product;
+
+    }
+    
+}
+
+//mapping 
+int main() {
+
+    // Example: A tiny 3x3 sparse matrix with 4 non-zero elements (NNZ = 4)
+    int num_rows = 3;
+    int nnz = 4;
+
+    //execute machine function
+    std::string machine_name = get_machine_name();
+
+    size_t size_I = (num_rows + 1) * sizeof(int);
+    size_t size_V = nnz * sizeof(float);
+    size_t size_C = nnz * sizeof(int);
+    size_t size_vector = num_rows * sizeof(float);
+
+    // Host allocations (CPU RAM)
+    int h_I[] = {0, 2, 3, 4};             // Row pointers
+    float h_V[] = {10.0f, 20.0f, 30.0f, 40.0f}; // Non-zero values
+    int h_C[] = {0, 2, 1, 2};             // Column indices
+    float h_x[] = {1.0f, 1.0f, 1.0f};     // Input vector x
+    float h_y[3] = {0.0f};                // Output vector y
+
+    // 2. Host Allocation & Memory Transport (Device VRAM Space)
+    int *d_I; float *d_V; int *d_C; float *d_x; float *d_y;
+    cudaMalloc((void**)&d_I, size_I);
+    cudaMalloc((void**)&d_V, size_V);
+    cudaMalloc((void**)&d_C, size_C);
+    cudaMalloc((void**)&d_x, size_vector);
+    cudaMalloc((void**)&d_y, size_vector);
+
+
+    // Pump data across the PCIe Bus (Architecture 0) | Copy data from Host (RAM) to Device (VRAM)
+    cudaMemcpy(d_I, h_I, size_I, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_V, h_V, size_V, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_C, h_C, size_C, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_x, h_x, size_vector, cudaMemcpyHostToDevice);
+
+    // 3. Grid Configuration & Launch Geometry
+    int threadsPerBlock = 256;
+    int numBlocks = (num_rows + threadsPerBlock -1) / threadsPerBlock;
+    //int numBlocks = cuda::ceil_div(num_rows, threadsPerBlock);
+
+    // Triple Chevron Gateway Launch cuda kernel 
+    spmv_kernel<<<numBlocks, threadsPerBlock>>>(d_I, d_V, d_C, d_x, d_y, num_rows);
+    cudaDeviceSynchronize(); //warm up 
+
+    // 5. Active Timing Block
+    const auto start = std::chrono::steady_clock::now();
+    //launch kernel 
+    spmv_kernel<<<numBlocks, threadsPerBlock>>>(d_I, d_V, d_C, d_x, d_y, num_rows);
+    
+    // wait for the GPU to finish computation before stopping the clock
+    cudaDeviceSynchronize(); 
+
+    const auto end = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> elapsed = end - start;
+    const double seconds = elapsed.count();
+
+    // copy final results to back host 
+    cudaMemcpy(h_y, d_y, size_vector, cudaMemcpyDeviceToHost);
+    //get results
+    std::cout << "SpMV Result Vector y: [" << h_y[0] << ", " << h_y[1] << ", " << h_y[2] << "]\n";
+
+
+    
+    // 7. Calculate Metrics
+    constexpr double flops_per_element = 2.0;
+    const double total_flops = static_cast<double>(num_rows) * flops_per_element;
+    constexpr double bytes_per_element = 3.0 * sizeof(double);
+    const double total_bytes = static_cast<double>(num_rows) * bytes_per_element;
+
+    const double gflops = total_flops / seconds / 1.0e9;
+    const double bandwidth_gb_s = total_bytes / seconds / 1.0e9;
+    const double arithmetic_intensity = flops_per_element / bytes_per_element;
+
+    double checksum = 0.0;
+    for (std::size_t i = 0; i < num_rows; ++i) {
+        checksum += h_y[i];
+    }
+
+    
+    std::cout << "CUDA GPU | Bandwidth: " << bandwidth_gb_s << " GB/s"
+              << " | Performance: " << gflops << " GFLOP/s\n";
+
+    // 8. CSV Management
+    std::ifstream check_empty("roofline.csv");
+    bool add_header = !check_empty.is_open() || check_empty.peek() == std::ifstream::traits_type::eof();
+    check_empty.close();
+
+    std::ofstream csv("roofline.csv", std::ios::app);
+    if (add_header) {
+        csv << "machine,dwarf name,AI,bandwidth (GB/s),performance (GFLOP/s),threads,checksum\n";
+    }
+
+    csv << machine_name << ","
+        << "spMV cuda" << ","
+        << arithmetic_intensity << ","
+        << bandwidth_gb_s << ","
+        << gflops << ","
+        << "CUDA" << ","
+        << checksum << "\n";
+
+    // 9. Clean up GPU memory allocations
+    cudaFree(d_I); 
+    cudaFree(d_V); 
+    cudaFree(d_C); 
+    cudaFree(d_x); 
+    cudaFree(d_y);
+
+    return 0;
+
+}
+
+
+//gemm_unified memory
+#include <iostream>
+#include <chrono>
+#include <vector>
+#include <fstream>
+#include <cstdlib>
+#include <cmath>
+#include <cuda_runtime.h>
+
+// Define compile-time physical tile dimensions inside the SM SRAM = 1024 threads
+#define TILE_DIM 32
+
+__global__ void gemm_kernel(
+    const float *A,
+    const float *B,
+    float *C,
+    int M,
+    int K,
+    int N,
+    float alpha,
+    float beta)
+{
+    //allocate the device shared memory array - strategy 2
+    __shared__ float tile_A[TILE_DIM][TILE_DIM];
+    __shared__ float tile_B[TILE_DIM][TILE_DIM];
+
+    int row = blockIdx.y * TILE_DIM + threadIdx.y;
+    int col = blockIdx.x * TILE_DIM + threadIdx.x;
+    float sum = 0.0f;
+
+    //loop through shared dimension K in tile size
+    //Boundary mapping
+    for (int t = 0; t < (K + TILE_DIM - 1) / TILE_DIM; ++t) {
+        //load matrix A to shared memory
+        /*
+        Emphasize size of submatrices for K..i.e. run a row check and a col check for both rows and cols
+        row check: sub row entering is less than larger matrix M, also tiled within overall dimension of K
+        i.e. (t *TILE_DIM + threadIdx.x) < K
+        */
+        if (row < M && (t * TILE_DIM + threadIdx.x) < K) {
+            tile_A[threadIdx.y][threadIdx.x] =
+            A[row * K + (t * TILE_DIM + threadIdx.x)];
+        } 
+        else {
+            tile_A[threadIdx.y][threadIdx.x] = 0.0f; 
+        }
+
+        //load matrix B into shared memory as well
+        /*
+        col check: sub col entering is less than larger matrix N, also tiled within overall dimension of K
+        i.e. (t *TILE_DIM + threadIdx.y) < K
+        */
+        if (col < N && (t * TILE_DIM + threadIdx.y) < K) {
+            tile_B[threadIdx.y][threadIdx.x] =
+            B[(t * TILE_DIM + threadIdx.y) * N + col];
+        } 
+        else {
+            tile_B[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        //ensure all tiles are loaded
+        __syncthreads();
+
+        for (int k = 0; k < TILE_DIM; ++k){
+            sum += tile_A[threadIdx.y][k] * tile_B[k][threadIdx.x];
+        }
+        __syncthreads();
+
+    }
+
+    //write final alpha/beta and results back to global memory
+    if (row < M && col < N) {
+        int idx = row * N + col;
+        C[idx] = (alpha * sum) + (beta * C[idx]);
+    }
+}
+
+//error check
+void checkcuda(cudaError_t result)
+{
+    if (result != cudaSuccess) {
+        std::cerr << "CUDA Runtime Error: "
+                  << cudaGetErrorString(result)
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+int main()
+{
+    const int M = 4096;
+    const int N = 4096;
+    const int K = 4096;
+
+    const float alpha = 1.5f;
+    const float beta = 0.5f;
+
+    size_t size_A = M * K * sizeof(float);
+    size_t size_B = K * N * sizeof(float);
+    size_t size_C = M * N * sizeof(float);
+
+    //Unified Memory allocation
+    float *A;
+    float *B;
+    float *C;
+
+    checkcuda(cudaMallocManaged(&A, size_A));
+    checkcuda(cudaMallocManaged(&B, size_B));
+    checkcuda(cudaMallocManaged(&C, size_C));
+
+    //initialize matrices directly through unified memory
+    for (int i = 0; i < M * K; ++i) A[i] = 1.0f;
+    for (int i = 0; i < K * N; ++i) B[i] = 0.5f;
+    for (int i = 0; i < M * N; ++i) C[i] = 2.0f;
+
+    //grid mapping on device
+    dim3 blockDim(TILE_DIM, TILE_DIM);
+    dim3 gridDim((N + TILE_DIM - 1) / TILE_DIM,(M + TILE_DIM - 1) / TILE_DIM);
+
+    //launch kernel
+    gemm_kernel<<<gridDim, blockDim>>>(A, B, C, M, N, K, alpha, beta);
+
+    checkcuda(cudaGetLastError());
+    checkcuda(cudaDeviceSynchronize());
+
+    //Active Timing Block
+    const auto start = std::chrono::steady_clock::now();
+
+    //launch kernel
+    gemm_kernel<<<gridDim, blockDim>>>(A, B, C, M, N, K, alpha, beta);
+
+    checkcuda(cudaGetLastError());
+
+    //sync gpu
+    checkcuda(cudaDeviceSynchronize());
+
+    //measure time
+    const auto end = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> elapsed = end - start;
+    const double seconds = elapsed.count();
+
+    //No device-to-host copy is required.
+    //After synchronization, C can be read directly by the CPU.
+
+    //verify results
+    float expected = 1.5f * (K * (1.0f * 0.5f)) + beta * 2.0f;
+    std::cout << "Baseline GEMM done. Results:"<< C[0]<< " (Expected: "<< expected<< ")"<< std::endl;
+
+    // 7. Calculate Metrics
+    const std::size_t num_rows = static_cast<std::size_t>(M) * static_cast<std::size_t>(N);
+    constexpr double flops_per_element = 2.0;
+    const double total_flops = flops_per_element * static_cast<double>(M) * static_cast<double>(N) * static_cast<double>(K);
+    constexpr double bytes_per_element = 3.0 * sizeof(double);
+    const double total_bytes = static_cast<double>(num_rows) * bytes_per_element;
+
+    const double gflops = total_flops / seconds / 1.0e9;
+    const double bandwidth_gb_s = total_bytes / seconds / 1.0e9;
+    const double arithmetic_intensity = flops_per_element / bytes_per_element;
+
+    double checksum = 0.0;
+
+    for (std::size_t i = 0; i < num_rows; ++i) {
+        checksum += C[i];
+    }
+
+    std::cout << "CUDA GPU GEMM | Bandwidth: " << bandwidth_gb_s << " GB/s | Performance: " << gflops << " GFLOP/s\n";
+
+    // --- CSV MANAGEMENT ---
+    std::ifstream check_empty("roofline.csv");
+
+    bool add_header =
+        !check_empty.is_open() ||
+        check_empty.peek() ==
+            std::ifstream::traits_type::eof();
+
+    check_empty.close();
+
+    std::ofstream csv("roofline.csv", std::ios::app);
+
+    if (add_header) {
+        csv << "machine,dwarf name,AI,bandwidth (GB/s),"
+               "performance (GFLOP/s),threads,checksum\n";
+    }
+
+    const char *machine_name = "CUDA GPU";
+
+    csv << machine_name<< "," << "GEMM Tileu" << "," << arithmetic_intensity << "," << bandwidth_gb_s << "," << gflops << "," << "CUDA" << "," << checksum << "\n";
+
+    //free unified memory
+    cudaFree(A);
+    cudaFree(B);
+    cudaFree(C);
+
+    return 0;
+}
+
+
+//gemm_descrete memory
+#include <iostream>
+#include <chrono>
+#include <vector>
+#include <fstream>
+#include <cstdlib>
+#include <cmath>
+#include <cuda_runtime.h>
+
+std::string get_machine_name() {
+#if defined(_WIN32) || defined(_WIN64)
+    const char* env = std::getenv("COMPUTERNAME");
+#else
+    const char* env = std::getenv("HOSTNAME");
+    if (!env) env = std::getenv("NAME");
+#endif
+    return env ? std::string(env) : "GPU_Machine";
+}
+
+// Define compile-time physical tile dimensions inside the SM SRAM = 1024 threads
+#define TILE_DIM 32
+
+__global__ void gemm_kernel(const float *A, const float *B, float *C, int M, int K, int N, float alpha, float beta){
+    //allocate the device shared memory array - strategy 2
+    __shared__ float tile_A[TILE_DIM][TILE_DIM];
+    __shared__ float tile_B[TILE_DIM][TILE_DIM];
+
+    int row = blockIdx.y * TILE_DIM + threadIdx.y;
+    int col = blockIdx.x * TILE_DIM + threadIdx.x;
+    float sum = 0.0f;
+
+    //loop through shared dimension K in tile size
+    //Boundary mapping
+    for (int t = 0; t < (K + TILE_DIM - 1) / TILE_DIM; ++t) {
+        //load matrix A to shared memory
+        /*
+        Emphasize size of submatrices for K..i.e. run a row check and a col check for both rows and cols
+        row check: sub row entering is less than larger matrix M, also tiled within overall dimension of K
+        i.e. (t *TILE_DIM + threadIdx.x) < K
+        */
+        if (row < M && (t * TILE_DIM + threadIdx.x) < K) {
+            tile_A[threadIdx.y][threadIdx.x] =
+                A[row * K + (t * TILE_DIM + threadIdx.x)];
+        }
+        else {
+            tile_A[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        //load matrix B into shared memory as well
+        /*
+        col check: sub col entering is less than larger matrix N, also tiled within overall dimension of K
+        i.e. (t *TILE_DIM + threadIdx.y) < K
+        */
+        if (col < N && (t * TILE_DIM + threadIdx.y) < K) {
+            tile_B[threadIdx.y][threadIdx.x] =
+                B[(t * TILE_DIM + threadIdx.y) * N + col];
+        }
+        else {
+            tile_B[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        //ensure all tiles are loaded
+        __syncthreads();
+
+        for (int k = 0; k < TILE_DIM; ++k){
+            sum += tile_A[threadIdx.y][k] * tile_B[k][threadIdx.x];
+        }
+        __syncthreads();
+    }
+
+    //write final alpha/beta and results back to global memory
+    if (row < M && col < N) {
+        int idx = row * N + col;
+        C[idx] = (alpha * sum) + (beta * C[idx]);
+    }
+}
+
+//error check
+void checkcuda(cudaError_t result)
+{
+    if (result != cudaSuccess) {
+        std::cerr << "CUDA Runtime Error: "
+                  << cudaGetErrorString(result)
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+int main()
+{
+    const int M = 4096;
+    const int N = 4096;
+    const int K = 4096;
+
+    const float alpha = 1.5f;
+    const float beta = 0.5f;
+
+    size_t size_A = M * K * sizeof(float);
+    size_t size_B = K * N * sizeof(float);
+    size_t size_C = M * N * sizeof(float);
+
+    //host mem allocation
+    float *h_A = new float[M * K];
+    float *h_B = new float[K * N];
+    float *h_C = new float[M * N];
+
+    //initialize matrices
+    for (int i = 0; i < M * K; ++i) h_A[i] = 1.0f;
+    for (int i = 0; i < K * N; ++i) h_B[i] = 0.5f;
+    for (int i = 0; i < M * N; ++i) h_C[i] = 2.0f;
+
+    //device allocation - one pointer per matrix
+    float *d_A;
+    float *d_B;
+    float *d_C;
+
+    cudaMalloc(&d_A, size_A);
+    cudaMalloc(&d_B, size_B);
+    cudaMalloc(&d_C, size_C);
+
+    //host to device transfer
+    cudaMemcpy(d_A, h_A, size_A, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, size_B, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_C, h_C, size_C, cudaMemcpyHostToDevice);
+
+    //grid mapping on device
+    dim3 blockDim(TILE_DIM, TILE_DIM);
+    dim3 gridDim(
+        (N + TILE_DIM - 1) / TILE_DIM,
+        (M + TILE_DIM - 1) / TILE_DIM
+    );
+
+    //launch kernel
+    gemm_kernel<<<gridDim, blockDim>>>(
+        d_A, d_B, d_C, M, N, K, alpha, beta
+    );
+
+    cudaDeviceSynchronize();
+
+    //Active Timing Block
+    const auto start = std::chrono::steady_clock::now();
+
+    //launch kernel
+    gemm_kernel<<<gridDim, blockDim>>>(
+        d_A, d_B, d_C, M, N, K, alpha, beta
+    );
+
+    //sync gpu
+    cudaDeviceSynchronize();
+
+    //measure time
+    const auto end = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> elapsed = end - start;
+    const double seconds = elapsed.count();
+
+    //result back to host
+    cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost);
+
+    //verify results
+    float expected = 1.5f * (K * (1.0f * 0.5f)) + beta * 2.0f;
+    std::cout << "Baseline GEMM done. Results:"<< h_C[0]<< " (Expected: "<< expected<< ")"<< std::endl;
+
+    // 7. Calculate Metrics
+    const std::size_t num_rows = static_cast<std::size_t>(M) * static_cast<std::size_t>(N);
+    constexpr double flops_per_element = 2.0;
+
+    const double total_flops = flops_per_element * static_cast<double>(M) * static_cast<double>(N) * static_cast<double>(K);
+    constexpr double bytes_per_element = 3.0 * sizeof(double);
+    const double total_bytes = static_cast<double>(num_rows) * bytes_per_element;
+    
+    const double gflops = total_flops / seconds / 1.0e9;
+    const double bandwidth_gb_s = total_bytes / seconds / 1.0e9;
+    const double arithmetic_intensity = flops_per_element / bytes_per_element;
+
+    double checksum = 0.0;
+
+    for (std::size_t i = 0; i < num_rows; ++i) {
+        checksum += h_C[i];
+    }
+
+    std::cout << "CUDA GPU GEMM | Bandwidth: "<< bandwidth_gb_s<< " GB/s | Performance: "<< gflops<< " GFLOP/s\n";
+
+    // --- CSV MANAGEMENT ---
+    std::ifstream check_empty("roofline.csv");
+
+    bool add_header = !check_empty.is_open() ||
+        check_empty.peek() ==
+            std::ifstream::traits_type::eof();
+    check_empty.close();
+
+    std::ofstream csv("roofline.csv", std::ios::app);
+
+    if (add_header) {
+        csv << "machine,dwarf name,AI,bandwidth (GB/s)," "performance (GFLOP/s),threads,checksum\n";
+    }
+
+    const char *machine_name = "CUDA GPU";
+    csv << machine_name<< ","<< "GEMM Tile"<< ","<< arithmetic_intensity<< ","<< bandwidth_gb_s<< ","<< gflops<< ","<< "CUDA"<< ","<< checksum<< "\n";
+
+    //free up memory
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+
+    return 0;
+}
+
+

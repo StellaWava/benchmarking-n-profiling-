@@ -93,3 +93,4 @@ The image above maps and summarizes the bottlenecks as would be exposed by each 
 **Results expected:** 
 
 # Results analysis
+Where are the performance cliffs, and hardware saturation points based on each dependence graph? 

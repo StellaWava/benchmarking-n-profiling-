@@ -11,7 +11,7 @@ profiling: nsys profile --stats=true ./gemm_profile
 #include <iostream>
 #include <cuda_runtime.h>
 #include <cuComplex.h>
-#include <cuda/cmath>
+#include <cmath>
 
 #define FFT_SIZE 256 // Must be a power of 2 for Radix-2
 
