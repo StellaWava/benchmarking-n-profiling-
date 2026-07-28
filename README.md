@@ -105,11 +105,13 @@ This phase examines four dependence-driven algorithms to assess their memory and
 
 Once the scripts in the cpp directory have been run, the benchmark outputs will produce CSV result files and be visualized using python/analyze.py.
 
-The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance envelope and highlights where bottlenecks emerge. The image analysis is shown below in [gpu_roofline_plot.png](gpu_roofline_plot.png), which captures the relationship between arithmetic intensity and achievable performance for the benchmarked kernels.
+The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance envelope and highlights where bottlenecks emerge. The image analysis is shown below, with the plot embedded directly from the repository file.
+
+![GPU roofline plot](gpu_roofline_plot.png)
 
 ### Analysis
 
-The image analysis in [gpu_roofline_plot.png](gpu_roofline_plot.png) indicates that:
+The image analysis in the plot indicates that:
 - discrete memory access remains a significant constraint, particularly as GEMM-style workloads scale
 - STREAM triad consistently behaves as one of the most memory-bound algorithms in this study
 - the plotted results highlight how the kernels move relative to the roofline and where they become limited by bandwidth or compute capability
