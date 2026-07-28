@@ -125,7 +125,7 @@ The value of this phase is that it produces reusable, measurable, and explainabl
 1. Exploit concurrency of each algorithm and sweep again 
 2. Build a triton kernel for transformer training and scaling.
 2. Train a transformer architecture
-3. Scale the transformer on H100 HPC environment 
+3. Scale the transformer on multi-GPU network 
 4. Finetuning components
 
 
