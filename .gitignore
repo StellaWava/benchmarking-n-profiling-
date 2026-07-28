@@ -22,7 +22,6 @@ __pycache__/
 *.py[cod]
 
 # Local analysis output
-*.png
 !parallelism_bottlenecks.png
 *.csv
 *.log
