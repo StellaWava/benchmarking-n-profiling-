@@ -99,16 +99,31 @@ This work is inspired by the broader question raised in the Cost of Distance blo
 
 The benchmark folder is a concrete way to operationalize that question. It is not just a code dump or a single isolated benchmark. It is a grounded first step in a longer trajectory from architectural understanding to benchmarking, then to model development and finetuning.
 
-## Phase 0 summary
+## Phase 0 Results
 
+This phase examines four dependence-driven algorithms to assess their memory and compute behavior in relation to the underlying architecture. The focus is on understanding how data movement patterns shape performance and how each kernel aligns with hardware constraints.
+
+Once the scripts in the cpp directory have been run, the benchmark outputs will produce CSV result files and be visualized using python/analyze.py.
+
+The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance envelope and highlights where bottlenecks emerge. The image analysis is shown below in [gpu_roofline_plot.png](gpu_roofline_plot.png), which captures the relationship between arithmetic intensity and achievable performance for the benchmarked kernels.
+
+### Analysis
+
+The image analysis in [gpu_roofline_plot.png](gpu_roofline_plot.png) indicates that:
+- discrete memory access remains a significant constraint, particularly as GEMM-style workloads scale
+- STREAM triad consistently behaves as one of the most memory-bound algorithms in this study
+- the plotted results highlight how the kernels move relative to the roofline and where they become limited by bandwidth or compute capability
+
+## Suggested next steps
 This repository represents Phase 0 of the long sprint:
 Architecture → Benchmarking → LLM Dev → Finetuning
 
 The value of this phase is that it produces reusable, measurable, and explainable systems work that can be shared publicly and carried forward into later stages.
 
-## Suggested next steps
+1. Exploit concurrency of each algorithm and sweep again 
+2. Build a triton kernel for transformer training and scaling.
+2. Train a transformer architecture
+3. Scale the transformer on H100 HPC environment 
+4. Finetuning components
 
-1. Capture a clean roofline data table for the current machine
-2. Label each kernel by its dependence structure and expected dwarf class
-3. Re-run the benchmark with consistent configuration and reproducibility notes
-4. Extend the same measurement contract to later LLM and finetuning components
+
