@@ -19,10 +19,10 @@ The emphasis is on latency, understanding architectural behavior and bottlenecks
 - `C++` for low-level benchmark implementations (CMake builds)
 - GPU roofline mapping by the dependence graphs
 
-| Column 1 | Baseline Roofline | Advanced benchmarking |
+| Dependence | Baseline Roofline `cpp` | Advanced benchmarking `cpp_ad` |
 | -------- | ----------------- | --------------------- |
 | `spMV` | Memory bandwidth & uncoalesced access | Flag divergence and non-contiguous memory requests |
-| `GEMM` | Tensor core | Show mixed-precision execution and hierarchical cache-line hits |
+| `GEMM` | cuda kernel | Tensor core/Show mixed-precision execution and hierarchical cache-line hits |
 | `GEMV` | Dynamic workloads & divergence | Measure runtime load imbalance and thread scheduling stalls |
 | `STREAM TRIAD` | Peak memory bandwidth | Set the ultimate saturation baseline for raw memory throughput |
 | `FFT` | Complex communication & memory strides | Expose shared memory bank conflicts and global memory stride penalties |
