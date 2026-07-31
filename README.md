@@ -1,10 +1,9 @@
 ## Phase 0: Benchmarking and Roofline Exploration for CPU/GPU Data Movement
 
-This repository explores system (GPU) performance mapping and optimization using both baseline and advanced benchmarking and roofline frameworks.
+This repository explores system (GPU) performance mapping and optimization using both baseline and advanced benchmarking and roofline frameworks. It maps how data-movement sets the performance ceiling of ML kernels. 
 
 ### What this repository explores
-The work in this folder focuses on connecting two scientific-computing questions to industry practice and innovation:
-
+The work profiles five dependence-graphs against measured CPU/GPU roofline to answer 2 industry efficience question:
 1. How does data movement limit performance across different machine architectures?
 2. How do dependence structure and data layout change the balance between compute and memory pressure?
 
