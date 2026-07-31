@@ -38,17 +38,17 @@ report1.nsys-rep
 report1.sqlite
 
 gemm
-gemmu 
+gemmu
 ggemm
 ggemmu
+ggemv
 ggemmv
-gpu_benchmark 
+gpu_benchmark
 gspMV
 gspMVu
 gstream
 spmv
 spmv_benchmark
 spmvu
-
 
 build/
