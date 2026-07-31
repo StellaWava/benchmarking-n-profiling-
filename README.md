@@ -1,67 +1,41 @@
-# Phase 0: Benchmarking and Roofline Exploration for CPU/GPU Data Movement
+##  Phase 0: Benchmarking and Roofline Exploration for CPU/GPU Data Movement
 
-This repository is a benchmarking and roofline working folder for exploring how data movement through modern machines shapes performance across scientific computing kernels. It is the first phase of the parallel high performance computing indexing project towards knowledge convergence, from: **Architecture → Benchmarking → LLM/Language Model Development → Finetuning**
+This repository is explores system(GPU) performance mapping and optimization using both baseline and advanced benchmarking and roofline frameworks. 
 
-The project phase is intentionally practical and reusable. It is designed to help map how different computational patterns stress the CPU and GPU in different ways, especially when the same underlying algorithmic ideas are expressed through arrays, tiles/stencils, and other structured data layouts.
-
-## What this repository studies
-
-The work in this folder focuses on two connected scientific-computing questions:
+### What this repository explores
+The work in this folder focuses on connecting two scientific-computing questions to industry practice and innovation:
 
 1. How does data movement limit performance across different machine architectures?
 2. How do dependence structure and data layout change the balance between compute and memory pressure?
 
-To explore those questions, the codebase benchmarks kernels that represent different performance motifs and dwarfs, including array-based and tile-based patterns that are commonly used in CPU and GPU workloads.
+The emphasis is latency and understanding the architectural behaviour and bottlenecks and how they are navigated, i.e. baseline and advanced roofline and benchmarking. Read the blog to extended notes; 
 
-The emphasis is latency and understanding the relationship between:
+- Baseline benchmarking - Identifying the Compute vs Memory bound dependency. 
+- Advanced benchmarking - Optimizing each dependency graph/data movement structure to maximize compute and memory benefits. 
 
-- arithmetic intensity
-- memory bandwidth
-- synchronization and dependence depth
-- roofline position
-- CPU vs GPU execution behavior
+### Approaches explored include;
+- Language & compiler: Custom `CUDA/c++` kernel writing (`nvcc` executions)
+- `Python` for analysis
+- `C++` for low-level benchmark implementations (CMake builds)
+- GPU roofline mapping  by the dependence graphs 
 
-## Why this folder exists
+| Column 1  | Baseline Roofline   | Advanced benchmarking |
+| --------  | -------- | -------- |
+| ``spMV``      | Memory bandwidth & Uncoalesced access     |Flag divergence and non-contiguous memory requests    |
+| ``GEMM``     |  Tensor core      |show mixed-precision execution and hierachical cache line hits        |
+|``GEMV``       |Dynamic workloads & divergence   |Measure runtime load-imbalance and thread scheduling stalls.   |
+|``STREAM TRIAD`` |Peak memory bandwidth   |set ultimate saturation baseline for raw mem throughput. |
+|``FFT``   |Complex communication & memory strides |E.xpose shared memory bank conflicts and global memory stride penalties. |
 
-This is the Phase 0 step in a longer sprint that runs from:
-At this stage, the objective is not to produce a polished end-to-end model pipeline, but to produce grounded, reusable systems-building work that anyone can inspect, reproduce, and extend.
+> **Note:** **These dependence graphs fully represent modelling behaviour across the traditional nueral nets  and transformers.**
 
-This means:
-- benchmark kernels that make the machine constraints visible
-- create clear roofline-style measurements
-- test representative data movement patterns across CPU and GPU
-- place the results into a common framework that can later support more advanced LLM and tuning work
-
-## Technologies used
-
-This repository combines multiple toolchains:
-
-- C++ for low-level benchmark implementations
-- CUDA/C++ for GPU-oriented kernels
-- Python for analysis, plotting, and roofline-style post-processing
-- CMake-based build organization for compiled benchmarks
-
-The code is intended to make it easy to compare different data movement regimes and expose how structure in the algorithm affects the machine-level bottleneck.
-
-## Core benchmark themes
-
-The current work is centered on the following benchmark themes:
-
-- CPU and GPU roofline-style performance measurement
-- streaming and bandwidth-driven kernels
-- compute-bound and memory-bound behavior comparison
-- analysis of data movement patterns across arrays, blocks, and tiled formulations
-- mapping the same algorithmic ideas across different machine layers
-
-This gives the repository a useful bridge between low-level systems understanding and later higher-level model-development work.
-
-## Repository structure
-
-- `cpp/` — benchmark and kernel source files in C++ and CUDA/C++
+### Repository structure
+- `cpp/` — baseline benchmark and kernel source files 
+- `cpp_ad/` — Advanced benchmark and kernel source files 
 - `python/` — analysis and plotting scripts
 - `build/` — generated build outputs and local CMake artifacts
-- `roofline.csv`, `roofline1.csv` — measurement snapshots used for roofline-style analysis
-- `roofline_chart.png` — generated visualization output
+- `roofline.csv`— measurement snapshots used for roofline-style analysis
+- `roofline_chart.png` — generated visualization
 
 ## Public access and cloning
 
@@ -71,61 +45,29 @@ This repository is public and can be cloned directly with:
 git clone https://github.com/StellaWava/benchmarking-n-profiling-.git
 cd benchmarking-n-profiling-
 ```
-
-If you are using this workspace directly, the project root is already the benchmark working folder and can be explored from there.
-
-## Getting started
+### Getting started
 
 A standard workflow for using the repository is:
-
 1. Clone the repository
-2. Inspect the benchmark sources in `cpp/`
-3. Build the relevant benchmark target with CMake/Ninja
-4. Run the executable(s) to collect performance data
-5. Use the Python analysis scripts to plot and interpret the results
+2. Inspect the benchmark sources in `cpp/` or `cpp_ad/`
+3. Build & Compile with CMake/Ninja/nvcc and reproduce `roofline.csv`
+4. Use the Python analysis scripts to plot and interpret the results
 
-## Reuse and extension
-
-This repository is structured to be reusable for people who want to:
-
-- understand roofline-style benchmarking in practice
-- compare CPU and GPU behavior on representative kernels
-- study how data layout and dependence structure affect performance
-- carry the same measurement contract into later LLM-related work
-
-## Project framing
-
-This work is inspired by the broader question raised in the Cost of Distance blog: how do we build mental models for knowledge convergence in computing by tracing how enduring constraints reappear across systems, architectures, and models? Read blog here: https://substack.com/@thecostofdistance/note/c-298245222?utm_source=notes-share-action&r=30yfjj 
-
-The benchmark folder is a concrete way to operationalize that question. It is not just a code dump or a single isolated benchmark. It is a grounded first step in a longer trajectory from architectural understanding to benchmarking, then to model development and finetuning.
-
-## Phase 0 Results
-
-This phase examines four dependence-driven algorithms to assess their memory and compute behavior in relation to the underlying architecture. The focus is on understanding how data movement patterns shape performance and how each kernel aligns with hardware constraints.
-
-Once the scripts in the cpp directory have been run, the benchmark outputs will produce CSV result files and be visualized using python/analyze.py.
-
-The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance envelope and highlights where bottlenecks emerge. The image analysis is shown below, with the plot embedded directly from the repository file.
-
+### Baseline results and analysis
+The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance ceiling and highlights where bottlenecks emerge, for advanced benchmarking.The image analysis is shown below, with the plot embedded directly from the repository file.
 ![GPU roofline plot](gpu_roofline_plot.png)
-
-### Analysis
 
 The image analysis in the plot indicates that:
 - discrete memory access remains a significant constraint, particularly as GEMM-style workloads scale
 - STREAM triad consistently behaves as one of the most memory-bound algorithms in this study
 - the plotted results highlight how the kernels move relative to the roofline and where they become limited by bandwidth or compute capability
 
-## Suggested next steps
-This repository represents Phase 0 of the long sprint:
-Architecture → Benchmarking → LLM Dev → Finetuning
+### Advanced results and analysis
+**Note** This is a working repository updated oftenly. Ensure to update every often if you fork. 
 
-The value of this phase is that it produces reusable, measurable, and explainable systems work that can be shared publicly and carried forward into later stages.
+### Motivation
+The overall goal is to highlight the research and engineering efforts made sofar towards overcoming bottlenecks encountered as a result of the nature of data movement through modern machines and how it shapes performance across scientific computing kernels. 
 
-1. Exploit concurrency of each algorithm and sweep again 
-2. Build a triton kernel for transformer training and scaling.
-2. Train a transformer architecture
-3. Scale the transformer on multi-GPU network 
-4. Finetuning components
+This phase zero is snapshot of the Parallel systems bloging exercise on redifing knowledge convergence through a new reserch question: [What is the cost of distance](https://www.stelladataarc.com/parallel-systems.html)?
 
-
+I am creating phases along **Architecture → Benchmarking → LLM/Language Model Dev & Training → Runtime & Inferencing → Finetuning**

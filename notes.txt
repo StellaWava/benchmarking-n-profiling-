@@ -156,3 +156,36 @@ int main(){
     cudaStream_t = streams[num_streams];
 
 }
+
+Distributed Shared Memory (DSM/Cluster memory) requires SM_90 (Hopper) or 
+newer hardware, adds massive API complexity, and deviates from your core goal.
+
+Note** Advanced benchmarking transcends rooflining and cpp_ad is the folder in which 
+I explore that. 
+i.e. 
+Shared-memory tiling 
+Tile matmatul
+Block-wise data reuse
+On-chip memory tiling 
+Software-managed cache optimization
+Shared-memory staging 
+
+Coalesced global-memory access
+Continous thread-level memory access
+Warp-aligned memory access
+optimized global-memory access partterns
+Stride-one memory access across threads 
+memory-transaction reduction..
+
+
+implementing hierarchical, 
+multi-level roofline visualizations for cache levels, 
+incorporating Tensor Core-specific mixed-precision performance, and 
+accounting for asynchronous data transfer overlaps
+
+1. I am mapping each workload to a given bottleneck. 
+a) spMV - Memory bandwidth & Uncoalesced access --Flag divergence and non-contiguous memory requests. 
+b) GEMM - Tensor core mapping -- showcase mixed-precision execution and hierachical cache line hits. 
+c) GEMV - Dynamic workloads & divergence -- Measure runtime load-imbalance and thread scheduling stalls.
+d) STREAM TRIAD - Peak memory bandwidth -- setting ultimate saturation baseline for raw mem throughput
+e) FFT - Complex communication & memory strides -- Expose shared memory bank conflicts and global memory stride penalties. 
