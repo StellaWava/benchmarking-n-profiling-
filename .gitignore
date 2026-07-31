@@ -39,3 +39,16 @@ report1.sqlite
 
 gemm
 gemmu 
+ggemm
+ggemmu
+ggemmv
+gpu_benchmark 
+gspMV
+gspMVu
+gstream
+spmv
+spmv_benchmark
+spmvu
+
+
+build/
