@@ -54,7 +54,7 @@ A standard workflow for using the repository is:
 
 ### Baseline results and analysis
 The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance ceiling and highlights where bottlenecks emerge. See results
-![GPU roofline plot](gpu_roofline_plot.png)
+![GPU roofline plot](python/gpu_roofline_plot.png)
 
 Conclusion from the baseline roofline plot:
 - GEMM is compute-bound, while the rest are memory-bound.
