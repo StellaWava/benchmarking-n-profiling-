@@ -57,10 +57,13 @@ A standard workflow for using the repository is:
 The resulting roofline-style plot illustrates how each kernel compares against the hardware’s peak-performance ceiling and highlights where bottlenecks emerge, for advanced benchmarking.The image analysis is shown below, with the plot embedded directly from the repository file.
 ![GPU roofline plot](gpu_roofline_plot.png)
 
-The image analysis in the plot indicates that:
-- discrete memory access remains a significant constraint, particularly as GEMM-style workloads scale
-- STREAM triad consistently behaves as one of the most memory-bound algorithms in this study
-- the plotted results highlight how the kernels move relative to the roofline and where they become limited by bandwidth or compute capability
+Conclusion from  baseline roofline plot:
+- GEMM is compute-bound while the rest are memory bound. 
+- Unified memory access is signifcantly more efficient than discrete memory access
+- STREAM triad is the most memory-bound algorithm 
+
+### Reference:
+Samuel Williams, Andrew Waterman, and David Patterson. 2009. Roofline: an insightful visual performance model for multicore architectures. Commun. ACM 52, 4 (April 2009), 65–76. https://doi.org/10.1145/1498765.1498785
 
 ### Advanced results and analysis
 **Note** This is a working repository updated oftenly. Ensure to update every often if you fork. 
@@ -71,3 +74,4 @@ The overall goal is to highlight the research and engineering efforts made sofar
 This phase zero is snapshot of the Parallel systems bloging exercise on redifing knowledge convergence through a new reserch question: [What is the cost of distance](https://www.stelladataarc.com/parallel-systems.html)?
 
 I am creating phases along **Architecture → Benchmarking → LLM/Language Model Dev & Training → Runtime & Inferencing → Finetuning**
+
